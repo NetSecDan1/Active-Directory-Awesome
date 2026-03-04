@@ -1,0 +1,177 @@
+{
+  "id": "dc-offline-v1",
+  "name": "DC Offline Response",
+  "version": "1.0",
+  "description": "Step-by-step playbook for responding to an offline Domain Controller",
+  "author": "AD Identity Control Plane",
+  "lastUpdated": "2025-01-01T00:00:00Z",
+  "severity": "Critical",
+  "estimatedTime": "15-45 minutes",
+  "trigger": {
+    "condition": "domainController.health.overallStatus === 'Offline'",
+    "dataSource": "DCHealthReport"
+  },
+  "steps": [
+    {
+      "id": "step-1",
+      "type": "decision",
+      "title": "Initial Connectivity Check",
+      "description": "Can you reach the DC via ICMP ping?",
+      "script": "Test-Connection -ComputerName {dc_hostname} -Count 3",
+      "readOnly": true,
+      "options": [
+        {
+          "label": "Yes - DC responds to ping",
+          "next": "step-2a"
+        },
+        {
+          "label": "No - DC does not respond",
+          "next": "step-2b"
+        }
+      ]
+    },
+    {
+      "id": "step-2a",
+      "type": "action",
+      "title": "Check AD Services",
+      "description": "DC is reachable but may have service issues. Check critical AD services.",
+      "script": "Get-Service -ComputerName {dc_hostname} -Name NTDS,DNS,Kdc,Netlogon,DFSR",
+      "readOnly": true,
+      "next": "step-3a"
+    },
+    {
+      "id": "step-2b",
+      "type": "decision",
+      "title": "Check Physical/VM Status",
+      "description": "DC is not responding to network. Is this a physical server or virtual machine?",
+      "options": [
+        {
+          "label": "Virtual Machine",
+          "next": "step-3b-vm"
+        },
+        {
+          "label": "Physical Server",
+          "next": "step-3b-phys"
+        }
+      ]
+    },
+    {
+      "id": "step-3a",
+      "type": "decision",
+      "title": "Service Status Assessment",
+      "description": "Are any critical services stopped?",
+      "options": [
+        {
+          "label": "NTDS is stopped",
+          "next": "step-4a-ntds"
+        },
+        {
+          "label": "DNS is stopped",
+          "next": "step-4a-dns"
+        },
+        {
+          "label": "Multiple services stopped",
+          "next": "step-4a-multi"
+        },
+        {
+          "label": "All services running",
+          "next": "step-4a-running"
+        }
+      ]
+    },
+    {
+      "id": "step-3b-vm",
+      "type": "info",
+      "title": "VM Console Access",
+      "description": "Access the VM console through your hypervisor (Hyper-V Manager, vSphere, etc.). Check if the VM is powered on, check for crash dumps or blue screens. If powered off, check the event log on the host for reasons.",
+      "next": "step-4b"
+    },
+    {
+      "id": "step-3b-phys",
+      "type": "info",
+      "title": "Physical Access Required",
+      "description": "Contact the data center or on-site team to check: Power status (LEDs, PSU), Console output (crash screen, POST errors), Network cable connectivity, iLO/iDRAC/IPMI remote management.",
+      "next": "step-4b"
+    },
+    {
+      "id": "step-4a-ntds",
+      "type": "action",
+      "title": "Check NTDS Database Integrity",
+      "description": "Before restarting NTDS, verify the database is not corrupt.",
+      "script": "Get-EventLog -ComputerName {dc_hostname} -LogName 'Directory Service' -Newest 20 -EntryType Error",
+      "readOnly": true,
+      "next": "step-5-verify"
+    },
+    {
+      "id": "step-4a-dns",
+      "type": "info",
+      "title": "Restart DNS Service",
+      "description": "DNS is critical for AD functionality. Verify DNS zones are loaded and check for event log errors related to DNS. If DNS depends on AD-integrated zones, NTDS must be running first.",
+      "next": "step-5-verify"
+    },
+    {
+      "id": "step-4a-multi",
+      "type": "info",
+      "title": "Multiple Service Failure - Consider Reboot",
+      "description": "Multiple critical services are stopped. This often indicates a more serious issue. Check Event Viewer for the root cause. A controlled reboot may be the fastest resolution, but ensure replication is current first.",
+      "next": "step-5-verify"
+    },
+    {
+      "id": "step-4a-running",
+      "type": "action",
+      "title": "Check LDAP and Kerberos Connectivity",
+      "description": "Services are running but DC appears offline. Test LDAP and Kerberos ports.",
+      "script": "Test-NetConnection -ComputerName {dc_hostname} -Port 389",
+      "readOnly": true,
+      "next": "step-5-verify"
+    },
+    {
+      "id": "step-4b",
+      "type": "decision",
+      "title": "DC Recovery Status",
+      "description": "Were you able to bring the DC back online?",
+      "options": [
+        {
+          "label": "Yes - DC is starting up",
+          "next": "step-5-verify"
+        },
+        {
+          "label": "No - Hardware/VM failure",
+          "next": "step-5-escalate"
+        }
+      ]
+    },
+    {
+      "id": "step-5-verify",
+      "type": "action",
+      "title": "Verify DC Health",
+      "description": "Run a full health check to verify the DC is back to healthy state.",
+      "script": "Get-ADDomainController -Identity {dc_hostname} | Select-Object HostName,IsGlobalCatalog,OperationMasterRoles",
+      "readOnly": true,
+      "next": "step-6-replication"
+    },
+    {
+      "id": "step-5-escalate",
+      "type": "info",
+      "title": "Escalation Required",
+      "description": "DC cannot be recovered. Actions needed: 1) Verify FSMO roles are not held by this DC (transfer if needed), 2) Check if this DC is the only GC in its site, 3) Notify infrastructure team, 4) Plan DC metadata cleanup if permanent failure, 5) Update DNS records.",
+      "next": "step-6-document"
+    },
+    {
+      "id": "step-6-replication",
+      "type": "action",
+      "title": "Verify Replication",
+      "description": "Ensure replication is healthy after recovery.",
+      "script": "repadmin /replsummary",
+      "readOnly": true,
+      "next": "step-6-document"
+    },
+    {
+      "id": "step-6-document",
+      "type": "info",
+      "title": "Document the Incident",
+      "description": "Record the following: 1) When the issue was detected, 2) Root cause (if identified), 3) Actions taken, 4) Resolution time, 5) Follow-up items (hardware replacement, capacity planning, etc.)",
+      "next": null
+    }
+  ]
+}

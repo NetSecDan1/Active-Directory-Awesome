@@ -1,0 +1,108 @@
+{
+  "id": "krbtgt-rotation-v1",
+  "name": "KRBTGT Account Password Rotation",
+  "version": "1.0",
+  "description": "Safely rotate the KRBTGT account password to maintain Kerberos security",
+  "author": "AD Identity Control Plane",
+  "lastUpdated": "2025-01-15T00:00:00Z",
+  "severity": "Medium",
+  "estimatedTime": "30-60 minutes (plus replication wait)",
+  "trigger": {
+    "condition": "krbtgt.passwordAge > 180",
+    "dataSource": "StaleAccounts"
+  },
+  "steps": [
+    {
+      "id": "step-1",
+      "type": "info",
+      "title": "Pre-Flight: Understand KRBTGT Rotation",
+      "description": "The KRBTGT account is used to encrypt/sign all Kerberos tickets. Rotating its password invalidates all existing TGTs. Key rules: 1) AD retains the CURRENT and PREVIOUS password (N and N-1), 2) You must rotate TWICE to fully invalidate old tickets, 3) Wait for FULL replication between rotations, 4) Maximum TGT lifetime is 10 hours by default. NEVER rotate twice without waiting for replication.",
+      "next": "step-2"
+    },
+    {
+      "id": "step-2",
+      "type": "action",
+      "title": "Check Current KRBTGT Password Age",
+      "description": "Verify how old the current KRBTGT password is.",
+      "script": "Get-ADUser krbtgt -Properties PasswordLastSet | Select-Object PasswordLastSet",
+      "readOnly": true,
+      "next": "step-3"
+    },
+    {
+      "id": "step-3",
+      "type": "action",
+      "title": "Verify Replication Health",
+      "description": "CRITICAL: All DCs must be replicating before rotating KRBTGT. A DC with the old password will reject tickets signed with the new one.",
+      "script": "repadmin /replsummary",
+      "readOnly": true,
+      "next": "step-4"
+    },
+    {
+      "id": "step-4",
+      "type": "decision",
+      "title": "Replication Status Check",
+      "description": "Is replication healthy across ALL domain controllers?",
+      "options": [
+        { "label": "Yes - all DCs replicating successfully", "next": "step-5-first-rotation" },
+        { "label": "No - some DCs have replication failures", "next": "step-4b-fix" }
+      ]
+    },
+    {
+      "id": "step-4b-fix",
+      "type": "info",
+      "title": "Fix Replication Before Proceeding",
+      "description": "DO NOT rotate KRBTGT until all DCs are replicating. Use the 'Replication Failure Response' playbook to resolve replication issues first. Once all DCs are healthy, return to this playbook.",
+      "next": null
+    },
+    {
+      "id": "step-5-first-rotation",
+      "type": "info",
+      "title": "Perform First KRBTGT Password Reset",
+      "description": "Reset the KRBTGT password (first rotation). This is a WRITE operation requiring Domain Admin privileges. Execute from a privileged workstation: Reset-ADServiceAccountPassword -Identity krbtgt. Or use the Microsoft KRBTGT reset script. After reset, the new password becomes N, the previous becomes N-1. Existing tickets signed with N-1 still work.",
+      "next": "step-6-wait"
+    },
+    {
+      "id": "step-6-wait",
+      "type": "action",
+      "title": "Wait for Full Replication",
+      "description": "Wait for the password change to replicate to ALL DCs. Check replication convergence.",
+      "script": "repadmin /replsummary",
+      "readOnly": true,
+      "next": "step-7-check"
+    },
+    {
+      "id": "step-7-check",
+      "type": "decision",
+      "title": "Verify First Rotation Replicated",
+      "description": "Has the first KRBTGT password change replicated to all DCs? Check that no errors occurred and all DCs show the new password timestamp.",
+      "options": [
+        { "label": "Yes - fully replicated, no issues", "next": "step-8-decide" },
+        { "label": "No - still replicating or errors", "next": "step-6-wait" }
+      ]
+    },
+    {
+      "id": "step-8-decide",
+      "type": "decision",
+      "title": "Second Rotation Decision",
+      "description": "Do you need to perform a second rotation? A second rotation invalidates ALL previous tickets. Only needed for: security incident response, suspected Golden Ticket attack, or compliance requirement.",
+      "options": [
+        { "label": "Yes - perform second rotation (security incident)", "next": "step-9-second" },
+        { "label": "No - first rotation is sufficient (routine maintenance)", "next": "step-10-document" }
+      ]
+    },
+    {
+      "id": "step-9-second",
+      "type": "info",
+      "title": "Perform Second KRBTGT Password Reset",
+      "description": "WARNING: This will invalidate ALL existing Kerberos tickets. Users and services will need to re-authenticate. Best performed during a maintenance window. After the second reset: wait for full replication again, then monitor for authentication failures. Maximum impact window is the TGT lifetime (default 10 hours).",
+      "next": "step-10-document"
+    },
+    {
+      "id": "step-10-document",
+      "type": "info",
+      "title": "Document the Rotation",
+      "description": "Record: 1) Date/time of rotation(s), 2) Whether single or double rotation, 3) Reason (routine, security incident, compliance), 4) Replication verification results, 5) Any authentication issues observed. Schedule the next rotation per your security policy (recommended: every 180 days).",
+      "next": null
+    }
+  ]
+}

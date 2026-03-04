@@ -1,0 +1,185 @@
+{
+  "id": "replication-failure-v1",
+  "name": "Replication Failure Response",
+  "version": "1.0",
+  "description": "Step-by-step playbook for diagnosing and resolving AD replication failures",
+  "author": "AD Identity Control Plane",
+  "lastUpdated": "2025-01-01T00:00:00Z",
+  "severity": "High",
+  "estimatedTime": "20-60 minutes",
+  "trigger": {
+    "condition": "replicationLink.status === 'Failed' || domainController.replication.failedPartners > 0",
+    "dataSource": "ReplicationStatus"
+  },
+  "steps": [
+    {
+      "id": "step-1",
+      "type": "action",
+      "title": "Get Replication Summary",
+      "description": "First, get a high-level view of replication status across all DCs.",
+      "script": "repadmin /replsummary",
+      "readOnly": true,
+      "next": "step-2"
+    },
+    {
+      "id": "step-2",
+      "type": "decision",
+      "title": "Identify Failure Scope",
+      "description": "Is the replication failure affecting a single DC pair or multiple DCs?",
+      "options": [
+        {
+          "label": "Single DC pair",
+          "next": "step-3-single"
+        },
+        {
+          "label": "Multiple DCs / site-wide",
+          "next": "step-3-wide"
+        },
+        {
+          "label": "All DCs failing",
+          "next": "step-3-all"
+        }
+      ]
+    },
+    {
+      "id": "step-3-single",
+      "type": "action",
+      "title": "Check Specific Replication Link",
+      "description": "Get detailed replication status for the failing link.",
+      "script": "repadmin /showrepl {dc_hostname}",
+      "readOnly": true,
+      "next": "step-4-network"
+    },
+    {
+      "id": "step-3-wide",
+      "type": "decision",
+      "title": "Site Link Assessment",
+      "description": "Is the failure between sites or within the same site?",
+      "options": [
+        {
+          "label": "Inter-site (between different sites)",
+          "next": "step-4-intersite"
+        },
+        {
+          "label": "Intra-site (within same site)",
+          "next": "step-4-network"
+        }
+      ]
+    },
+    {
+      "id": "step-3-all",
+      "type": "info",
+      "title": "Critical: Forest-Wide Replication Failure",
+      "description": "All DCs failing replication suggests a fundamental infrastructure issue. Check: 1) DNS infrastructure (all DCs must resolve each other), 2) Network routing between all sites, 3) Time synchronization (Kerberos requires <5 min skew), 4) AD replication topology (KCC generated). This may require immediate escalation.",
+      "next": "step-4-dns"
+    },
+    {
+      "id": "step-4-network",
+      "type": "action",
+      "title": "Test Network Connectivity",
+      "description": "Verify network connectivity between the source and destination DC.",
+      "script": "Test-NetConnection -ComputerName {dc_hostname} -Port 135",
+      "readOnly": true,
+      "next": "step-5-diagnose"
+    },
+    {
+      "id": "step-4-intersite",
+      "type": "action",
+      "title": "Check Site Link Configuration",
+      "description": "Verify the site link exists and has appropriate cost/schedule settings.",
+      "script": "Get-ADReplicationSiteLink -Filter * | Select-Object Name,Cost,ReplicationFrequencyInMinutes,SitesIncluded",
+      "readOnly": true,
+      "next": "step-4-network"
+    },
+    {
+      "id": "step-4-dns",
+      "type": "action",
+      "title": "Verify DNS Resolution",
+      "description": "Ensure all DCs can resolve each other via DNS. SRV records must be present.",
+      "script": "Resolve-DnsName -Name _ldap._tcp.dc._msdcs.{domain} -Type SRV",
+      "readOnly": true,
+      "next": "step-5-diagnose"
+    },
+    {
+      "id": "step-5-diagnose",
+      "type": "decision",
+      "title": "Error Code Analysis",
+      "description": "What is the replication error code?",
+      "options": [
+        {
+          "label": "8453 - Replication access denied",
+          "next": "step-6-access"
+        },
+        {
+          "label": "8456/8457 - Source/Dest rejecting",
+          "next": "step-6-rejecting"
+        },
+        {
+          "label": "1722 - RPC server unavailable",
+          "next": "step-6-rpc"
+        },
+        {
+          "label": "1908 - DC not found",
+          "next": "step-6-dns"
+        },
+        {
+          "label": "Other / Unknown",
+          "next": "step-6-other"
+        }
+      ]
+    },
+    {
+      "id": "step-6-access",
+      "type": "info",
+      "title": "Replication Access Denied (8453)",
+      "description": "This error indicates a permissions issue. Check: 1) The DC computer account exists in the Domain Controllers OU, 2) Default Domain Controllers Policy is applied, 3) The DC has 'Replicating Directory Changes' permission, 4) Check for USN rollback (Event ID 2095 in Directory Service log).",
+      "next": "step-7-verify"
+    },
+    {
+      "id": "step-6-rejecting",
+      "type": "info",
+      "title": "Source/Destination Rejecting (8456/8457)",
+      "description": "The DC is refusing replication, often due to USN rollback or journal wrap. Check: 1) Event Viewer > Directory Service log for Event 2095 (USN rollback), 2) Event Viewer > File Replication Service for Event 13568 (journal wrap), 3) If USN rollback: DC may need to be forcefully demoted and re-promoted, 4) If journal wrap: Follow KB 290762 for DFSR recovery.",
+      "next": "step-7-verify"
+    },
+    {
+      "id": "step-6-rpc",
+      "type": "info",
+      "title": "RPC Server Unavailable (1722)",
+      "description": "Network connectivity issue between DCs. Verify: 1) Firewall rules allow RPC traffic (TCP 135 + dynamic ports), 2) DNS resolution is working both directions, 3) The target DC is running and accessible, 4) No network segmentation blocking traffic. Try: Test-NetConnection to port 135 and the ephemeral port range.",
+      "next": "step-7-verify"
+    },
+    {
+      "id": "step-6-dns",
+      "type": "info",
+      "title": "DC Not Found (1908)",
+      "description": "DNS cannot locate the domain controller. Check: 1) DC SRV records exist in DNS (_msdcs zone), 2) Netlogon service is running (registers SRV records), 3) DNS server is authoritative for the domain zone, 4) Run 'nltest /dsregdns' on the affected DC to re-register, 5) Check DNS replication if using AD-integrated zones.",
+      "next": "step-7-verify"
+    },
+    {
+      "id": "step-6-other",
+      "type": "action",
+      "title": "Run DCDiag Replication Test",
+      "description": "Run comprehensive replication diagnostics.",
+      "script": "dcdiag /s:{dc_hostname} /test:Replications /test:Connectivity /test:DNS",
+      "readOnly": true,
+      "next": "step-7-verify"
+    },
+    {
+      "id": "step-7-verify",
+      "type": "action",
+      "title": "Verify Replication Recovery",
+      "description": "After applying the fix, verify replication is working.",
+      "script": "repadmin /replsummary",
+      "readOnly": true,
+      "next": "step-8-document"
+    },
+    {
+      "id": "step-8-document",
+      "type": "info",
+      "title": "Document and Monitor",
+      "description": "Record the incident: 1) Error code and affected DCs, 2) Root cause, 3) Resolution steps taken, 4) Time to resolution. Set up monitoring: Watch for replication failures in the next 24 hours. If the issue recurs, consider deeper investigation into the underlying cause.",
+      "next": null
+    }
+  ]
+}

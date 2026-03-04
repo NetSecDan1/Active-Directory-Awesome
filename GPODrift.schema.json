@@ -1,0 +1,192 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ad-identity-control.local/schemas/GPODrift.schema.json",
+  "title": "GPO Drift Report",
+  "description": "Tracks Group Policy Object configuration drift across domain controllers",
+  "type": "object",
+  "required": [
+    "reportId",
+    "generatedAt",
+    "generatedBy",
+    "schemaVersion",
+    "domain",
+    "gpoSnapshots"
+  ],
+  "properties": {
+    "reportId": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "generatedBy": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "type": "string",
+      "enum": ["1.0.0"]
+    },
+    "domain": {
+      "type": "string",
+      "description": "FQDN of the domain"
+    },
+    "gpoSnapshots": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/GPOSnapshot"
+      }
+    },
+    "driftDetections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/DriftDetection"
+      }
+    },
+    "summary": {
+      "$ref": "#/definitions/DriftSummary"
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "GPOSnapshot": {
+      "type": "object",
+      "required": ["gpoId", "displayName", "status", "createdTime", "modifiedTime"],
+      "properties": {
+        "gpoId": {
+          "type": "string",
+          "description": "GPO GUID",
+          "pattern": "^\\{?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\\}?$"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["AllSettingsEnabled", "UserSettingsDisabled", "ComputerSettingsDisabled", "AllSettingsDisabled"]
+        },
+        "createdTime": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "modifiedTime": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "userVersionDirectory": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "userVersionSysvol": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "computerVersionDirectory": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "computerVersionSysvol": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "owner": {
+          "type": "string"
+        },
+        "linksTo": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "OUs/sites where this GPO is linked"
+        },
+        "wmiFilter": {
+          "type": ["string", "null"],
+          "description": "Associated WMI filter name if any"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DriftDetection": {
+      "type": "object",
+      "required": ["gpoId", "gpoName", "driftType", "severity", "detectedAt"],
+      "properties": {
+        "gpoId": {
+          "type": "string"
+        },
+        "gpoName": {
+          "type": "string"
+        },
+        "driftType": {
+          "type": "string",
+          "enum": [
+            "VersionMismatch",
+            "SysvolAdMismatch",
+            "UnauthorizedChange",
+            "MissingLink",
+            "OrphanedGPO",
+            "PermissionChange"
+          ]
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["Low", "Medium", "High", "Critical"]
+        },
+        "detectedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "description": {
+          "type": "string"
+        },
+        "affectedDCs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "expectedValue": {
+          "type": "string"
+        },
+        "actualValue": {
+          "type": "string"
+        },
+        "recommendation": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DriftSummary": {
+      "type": "object",
+      "required": ["totalGPOs", "driftsDetected"],
+      "properties": {
+        "totalGPOs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "driftsDetected": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "criticalDrifts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "highDrifts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "mediumDrifts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "lowDrifts": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

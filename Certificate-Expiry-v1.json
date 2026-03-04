@@ -1,0 +1,105 @@
+{
+  "id": "certificate-expiry-v1",
+  "name": "Certificate Expiry Response",
+  "version": "1.0",
+  "description": "Identify and remediate expiring or expired certificates on domain controllers",
+  "author": "AD Identity Control Plane",
+  "lastUpdated": "2025-01-15T00:00:00Z",
+  "severity": "High",
+  "estimatedTime": "20-40 minutes",
+  "trigger": {
+    "condition": "certificate.daysUntilExpiry < 30",
+    "dataSource": "DCHealthReport"
+  },
+  "steps": [
+    {
+      "id": "step-1",
+      "type": "action",
+      "title": "Check DC Certificate Status",
+      "description": "List all certificates on the domain controller and check expiry dates.",
+      "script": "Get-ChildItem Cert:\\LocalMachine\\My | Select-Object Subject,NotAfter,Issuer | Sort-Object NotAfter",
+      "readOnly": true,
+      "next": "step-2"
+    },
+    {
+      "id": "step-2",
+      "type": "decision",
+      "title": "Certificate Status",
+      "description": "What is the state of the DC certificates?",
+      "options": [
+        { "label": "Certificate already expired", "next": "step-3-expired" },
+        { "label": "Certificate expiring within 30 days", "next": "step-3-expiring" },
+        { "label": "All certificates valid", "next": "step-3-valid" }
+      ]
+    },
+    {
+      "id": "step-3-expired",
+      "type": "decision",
+      "title": "Identify Expired Certificate Type",
+      "description": "Which certificate has expired?",
+      "options": [
+        { "label": "LDAPS / Domain Controller certificate", "next": "step-4-dc-cert" },
+        { "label": "Kerberos authentication certificate", "next": "step-4-kerberos" },
+        { "label": "Internal CA / Root certificate", "next": "step-4-ca" }
+      ]
+    },
+    {
+      "id": "step-3-expiring",
+      "type": "info",
+      "title": "Schedule Certificate Renewal",
+      "description": "Certificate is expiring soon. If auto-enrollment is configured, it should renew automatically. Check: 1) Certificate auto-enrollment GPO is applied, 2) The CA is online and has a valid signing certificate, 3) The certificate template allows auto-enrollment. If auto-enrollment is not configured, plan a manual renewal during maintenance window.",
+      "next": "step-5-autoenroll"
+    },
+    {
+      "id": "step-3-valid",
+      "type": "info",
+      "title": "Certificates Are Valid",
+      "description": "All DC certificates are within their validity period. Review the earliest expiry date and set a reminder for 30 days before. Ensure certificate auto-enrollment is configured to prevent future issues.",
+      "next": "step-7-document"
+    },
+    {
+      "id": "step-4-dc-cert",
+      "type": "info",
+      "title": "Expired DC / LDAPS Certificate",
+      "description": "An expired DC certificate will break LDAPS connections and may affect smart card authentication. Immediate actions: 1) Check if the Enterprise CA is healthy, 2) Request a new DC certificate from the CA, 3) If CA is unavailable, consider a self-signed certificate as temporary measure. Note: LDAP (port 389) still works without a valid certificate.",
+      "next": "step-5-autoenroll"
+    },
+    {
+      "id": "step-4-kerberos",
+      "type": "info",
+      "title": "Expired Kerberos Certificate",
+      "description": "An expired Kerberos certificate affects PKINIT and smart card logon. Standard password-based Kerberos is unaffected. To remediate: 1) Ensure the KDC certificate template is published, 2) Force certificate auto-enrollment, 3) Verify the new certificate has the KDC EKU (1.3.6.1.5.2.3.5).",
+      "next": "step-5-autoenroll"
+    },
+    {
+      "id": "step-4-ca",
+      "type": "info",
+      "title": "Expired CA Certificate - Critical",
+      "description": "An expired CA certificate is a high-impact event. All certificates issued by this CA will be untrusted. Actions: 1) DO NOT delete the old CA certificate, 2) Renew the CA certificate (same key or new key depending on policy), 3) Publish the renewed certificate to AD, 4) Wait for replication, 5) Force Group Policy update on DCs. This may require a change control process.",
+      "next": "step-6-verify"
+    },
+    {
+      "id": "step-5-autoenroll",
+      "type": "info",
+      "title": "Verify Auto-Enrollment",
+      "description": "Check that certificate auto-enrollment is properly configured: 1) Open GPMC and check for auto-enrollment policy, 2) The policy should be linked to the Domain Controllers OU, 3) Certificate templates must have 'Autoenroll' permission for Domain Controllers. Force enrollment with: certutil -pulse",
+      "next": "step-6-verify"
+    },
+    {
+      "id": "step-6-verify",
+      "type": "action",
+      "title": "Verify New Certificate",
+      "description": "Confirm the new certificate is installed and valid.",
+      "script": "Get-ChildItem Cert:\\LocalMachine\\My | Where-Object { $_.NotAfter -gt (Get-Date) } | Select-Object Subject,NotAfter,Issuer",
+      "readOnly": true,
+      "next": "step-7-document"
+    },
+    {
+      "id": "step-7-document",
+      "type": "info",
+      "title": "Document and Set Reminders",
+      "description": "Record: 1) Which certificates were affected, 2) Root cause (auto-enrollment failure, CA issue, template misconfiguration), 3) Remediation steps, 4) Set calendar reminders for 30 days before next expiry, 5) Consider implementing certificate monitoring.",
+      "next": null
+    }
+  ]
+}

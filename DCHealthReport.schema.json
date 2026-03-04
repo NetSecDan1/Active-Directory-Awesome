@@ -1,0 +1,391 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ad-identity-control.local/schemas/DCHealthReport.schema.json",
+  "title": "DC Health Report",
+  "description": "Comprehensive health report for an Active Directory Domain Controller",
+  "type": "object",
+  "required": [
+    "reportId",
+    "generatedAt",
+    "generatedBy",
+    "schemaVersion",
+    "domain",
+    "domainControllers"
+  ],
+  "properties": {
+    "reportId": {
+      "type": "string",
+      "description": "Unique identifier for this report (GUID format)",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when the report was generated"
+    },
+    "generatedBy": {
+      "type": "string",
+      "description": "Username or service account that generated this report"
+    },
+    "schemaVersion": {
+      "type": "string",
+      "description": "Version of the schema used",
+      "enum": ["1.0.0"]
+    },
+    "domain": {
+      "$ref": "#/definitions/DomainInfo"
+    },
+    "domainControllers": {
+      "type": "array",
+      "description": "List of domain controllers and their health status",
+      "items": {
+        "$ref": "#/definitions/DomainController"
+      },
+      "minItems": 1
+    },
+    "summary": {
+      "$ref": "#/definitions/ReportSummary"
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "DomainInfo": {
+      "type": "object",
+      "required": ["name", "forestName", "functionalLevel", "siteName"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "FQDN of the AD domain"
+        },
+        "forestName": {
+          "type": "string",
+          "description": "FQDN of the AD forest"
+        },
+        "functionalLevel": {
+          "type": "string",
+          "description": "Domain functional level",
+          "enum": [
+            "Windows2000Domain",
+            "Windows2003Domain",
+            "Windows2008Domain",
+            "Windows2008R2Domain",
+            "Windows2012Domain",
+            "Windows2012R2Domain",
+            "Windows2016Domain",
+            "Windows2025Domain"
+          ]
+        },
+        "siteName": {
+          "type": "string",
+          "description": "AD site name where collection occurred"
+        },
+        "pdcEmulator": {
+          "type": "string",
+          "description": "FQDN of the PDC Emulator"
+        },
+        "schemaVersion": {
+          "type": "integer",
+          "description": "AD schema version number"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DomainController": {
+      "type": "object",
+      "required": [
+        "hostname",
+        "ipAddress",
+        "site",
+        "operatingSystem",
+        "isGlobalCatalog",
+        "fsmoRoles",
+        "health"
+      ],
+      "properties": {
+        "hostname": {
+          "type": "string",
+          "description": "FQDN of the domain controller"
+        },
+        "ipAddress": {
+          "type": "string",
+          "description": "Primary IP address",
+          "anyOf": [
+            { "format": "ipv4" },
+            { "format": "ipv6" }
+          ]
+        },
+        "site": {
+          "type": "string",
+          "description": "AD site this DC belongs to"
+        },
+        "operatingSystem": {
+          "type": "string",
+          "description": "Windows Server version"
+        },
+        "operatingSystemVersion": {
+          "type": "string",
+          "description": "Detailed OS version string"
+        },
+        "isGlobalCatalog": {
+          "type": "boolean",
+          "description": "Whether this DC is a Global Catalog server"
+        },
+        "isReadOnly": {
+          "type": "boolean",
+          "description": "Whether this is a Read-Only Domain Controller (RODC)",
+          "default": false
+        },
+        "fsmoRoles": {
+          "type": "array",
+          "description": "FSMO roles held by this DC",
+          "items": {
+            "type": "string",
+            "enum": [
+              "SchemaMaster",
+              "DomainNamingMaster",
+              "PDCEmulator",
+              "RIDMaster",
+              "InfrastructureMaster"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "health": {
+          "$ref": "#/definitions/DCHealth"
+        },
+        "services": {
+          "type": "array",
+          "description": "Status of critical AD services",
+          "items": {
+            "$ref": "#/definitions/ServiceStatus"
+          }
+        },
+        "replication": {
+          "$ref": "#/definitions/ReplicationInfo"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DCHealth": {
+      "type": "object",
+      "required": ["overallStatus", "checks"],
+      "properties": {
+        "overallStatus": {
+          "$ref": "#/definitions/HealthStatus"
+        },
+        "lastChecked": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "uptimeDays": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Days since last reboot"
+        },
+        "cpuUsagePercent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Current CPU usage percentage"
+        },
+        "memoryUsagePercent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Current memory usage percentage"
+        },
+        "diskFreePercent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Free disk space on system drive as percentage"
+        },
+        "checks": {
+          "type": "array",
+          "description": "Individual health check results",
+          "items": {
+            "$ref": "#/definitions/HealthCheck"
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "HealthCheck": {
+      "type": "object",
+      "required": ["name", "status"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the health check",
+          "enum": [
+            "DCDiag",
+            "DNSResolution",
+            "SYSVOLReplication",
+            "NETLOGONShare",
+            "KerberosTicketing",
+            "LDAPConnectivity",
+            "TimeSync",
+            "DiskSpace",
+            "ServiceHealth",
+            "ReplicationHealth"
+          ]
+        },
+        "status": {
+          "$ref": "#/definitions/HealthStatus"
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable status message"
+        },
+        "details": {
+          "type": "object",
+          "description": "Additional check-specific details",
+          "additionalProperties": true
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ServiceStatus": {
+      "type": "object",
+      "required": ["name", "status", "startType"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Service name"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Service display name"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Running", "Stopped", "StartPending", "StopPending", "Paused", "Unknown"]
+        },
+        "startType": {
+          "type": "string",
+          "enum": ["Automatic", "Manual", "Disabled", "AutomaticDelayedStart"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "ReplicationInfo": {
+      "type": "object",
+      "properties": {
+        "partnerCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of replication partners"
+        },
+        "failedPartners": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of partners with failed replication"
+        },
+        "lastSuccessfulReplication": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of last successful replication"
+        },
+        "pendingChanges": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of changes pending replication"
+        },
+        "partners": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ReplicationPartner"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ReplicationPartner": {
+      "type": "object",
+      "required": ["partnerHostname", "status"],
+      "properties": {
+        "partnerHostname": {
+          "type": "string",
+          "description": "FQDN of the replication partner"
+        },
+        "partnerSite": {
+          "type": "string",
+          "description": "AD site of the partner"
+        },
+        "status": {
+          "$ref": "#/definitions/HealthStatus"
+        },
+        "lastReplication": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "consecutiveFailures": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "lastError": {
+          "type": "string",
+          "description": "Last error message if any"
+        },
+        "namingContext": {
+          "type": "string",
+          "description": "The partition being replicated"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ReportSummary": {
+      "type": "object",
+      "required": [
+        "totalDCs",
+        "healthyDCs",
+        "warningDCs",
+        "criticalDCs"
+      ],
+      "properties": {
+        "totalDCs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "healthyDCs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warningDCs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "criticalDCs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "offlineDCs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "replicationIssues": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "serviceIssues": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "overallHealth": {
+          "$ref": "#/definitions/HealthStatus"
+        }
+      },
+      "additionalProperties": false
+    },
+    "HealthStatus": {
+      "type": "string",
+      "enum": ["Healthy", "Warning", "Critical", "Offline", "Unknown"],
+      "description": "Standard health status indicator"
+    }
+  }
+}

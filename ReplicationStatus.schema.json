@@ -1,0 +1,191 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ad-identity-control.local/schemas/ReplicationStatus.schema.json",
+  "title": "Replication Status Report",
+  "description": "Detailed AD replication status across all domain controllers and naming contexts",
+  "type": "object",
+  "required": [
+    "reportId",
+    "generatedAt",
+    "generatedBy",
+    "schemaVersion",
+    "domain",
+    "replicationLinks"
+  ],
+  "properties": {
+    "reportId": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "generatedBy": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "type": "string",
+      "enum": ["1.0.0"]
+    },
+    "domain": {
+      "type": "string"
+    },
+    "replicationLinks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/ReplicationLink"
+      }
+    },
+    "siteLinks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/SiteLink"
+      }
+    },
+    "summary": {
+      "$ref": "#/definitions/ReplicationSummary"
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "ReplicationLink": {
+      "type": "object",
+      "required": [
+        "sourceDC",
+        "destinationDC",
+        "namingContext",
+        "status"
+      ],
+      "properties": {
+        "sourceDC": {
+          "type": "string",
+          "description": "FQDN of the source domain controller"
+        },
+        "destinationDC": {
+          "type": "string",
+          "description": "FQDN of the destination domain controller"
+        },
+        "sourceSite": {
+          "type": "string"
+        },
+        "destinationSite": {
+          "type": "string"
+        },
+        "namingContext": {
+          "type": "string",
+          "description": "Distinguished name of the replicated partition"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Healthy", "Warning", "Failed", "Unknown"]
+        },
+        "lastReplicationAttempt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lastSuccessfulReplication": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "consecutiveFailures": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "lastErrorCode": {
+          "type": "integer",
+          "description": "Win32 error code from last failure"
+        },
+        "lastErrorMessage": {
+          "type": "string"
+        },
+        "transportType": {
+          "type": "string",
+          "enum": ["RPC", "SMTP"],
+          "description": "Replication transport protocol"
+        },
+        "isCompressed": {
+          "type": "boolean"
+        },
+        "replicationIntervalMinutes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Configured replication interval"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SiteLink": {
+      "type": "object",
+      "required": ["name", "sites", "cost"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "sites": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 2
+        },
+        "cost": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "replicationIntervalMinutes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "schedule": {
+          "type": "string",
+          "description": "Replication schedule description"
+        },
+        "transportType": {
+          "type": "string",
+          "enum": ["IP", "SMTP"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "ReplicationSummary": {
+      "type": "object",
+      "required": ["totalLinks", "healthyLinks", "failedLinks"],
+      "properties": {
+        "totalLinks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "healthyLinks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warningLinks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failedLinks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "averageLatencyMs": {
+          "type": "number",
+          "minimum": 0
+        },
+        "oldestFailure": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "totalSites": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "totalSiteLinks": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

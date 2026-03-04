@@ -1,0 +1,192 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ad-identity-control.local/schemas/TrustRelationship.schema.json",
+  "title": "Trust Relationship Report",
+  "description": "Report of Active Directory trust relationships and their health status",
+  "type": "object",
+  "required": [
+    "reportId",
+    "generatedAt",
+    "generatedBy",
+    "schemaVersion",
+    "sourceDomain",
+    "trusts"
+  ],
+  "properties": {
+    "reportId": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "generatedBy": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "type": "string",
+      "enum": ["1.0.0"]
+    },
+    "sourceDomain": {
+      "type": "string",
+      "description": "FQDN of the domain from which trusts are enumerated"
+    },
+    "trusts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/TrustRelationship"
+      }
+    },
+    "summary": {
+      "$ref": "#/definitions/TrustSummary"
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "TrustRelationship": {
+      "type": "object",
+      "required": [
+        "trustedDomain",
+        "trustDirection",
+        "trustType",
+        "status"
+      ],
+      "properties": {
+        "trustedDomain": {
+          "type": "string",
+          "description": "FQDN of the trusted domain"
+        },
+        "flatName": {
+          "type": "string",
+          "description": "NetBIOS name of the trusted domain"
+        },
+        "trustDirection": {
+          "type": "string",
+          "enum": ["Inbound", "Outbound", "Bidirectional"],
+          "description": "Direction of the trust"
+        },
+        "trustType": {
+          "type": "string",
+          "enum": ["ParentChild", "TreeRoot", "External", "Forest", "Shortcut", "Realm"],
+          "description": "Type of trust relationship"
+        },
+        "trustAttributes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "NonTransitive",
+              "UplevelOnly",
+              "FilterSIDs",
+              "ForestTransitive",
+              "CrossOrganization",
+              "WithinForest",
+              "TreatAsExternal",
+              "SelectiveAuthentication"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Healthy", "Degraded", "Broken", "Unknown"]
+        },
+        "isTransitive": {
+          "type": "boolean"
+        },
+        "sidFilteringEnabled": {
+          "type": "boolean",
+          "description": "Whether SID filtering (quarantine) is enabled"
+        },
+        "selectiveAuthentication": {
+          "type": "boolean",
+          "description": "Whether selective authentication is enabled"
+        },
+        "whenCreated": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lastVerified": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last time the trust was verified"
+        },
+        "lastVerificationResult": {
+          "type": "string",
+          "description": "Result of the last trust verification"
+        },
+        "securityConcerns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SecurityConcern"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "SecurityConcern": {
+      "type": "object",
+      "required": ["type", "severity", "description"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "NoSIDFiltering",
+            "NoSelectiveAuth",
+            "BidirectionalExternal",
+            "StaleVerification",
+            "BrokenTrust",
+            "NonTransitiveRisk"
+          ]
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["Low", "Medium", "High", "Critical"]
+        },
+        "description": {
+          "type": "string"
+        },
+        "recommendation": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "TrustSummary": {
+      "type": "object",
+      "required": ["totalTrusts"],
+      "properties": {
+        "totalTrusts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "healthyTrusts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "degradedTrusts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "brokenTrusts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "forestTrusts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "externalTrusts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "securityConcernsCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

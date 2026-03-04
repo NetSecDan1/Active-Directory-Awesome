@@ -1,0 +1,125 @@
+{
+  "id": "dns-resolution-failure-v1",
+  "name": "DNS Resolution Failure",
+  "version": "1.0",
+  "description": "Diagnose and resolve DNS resolution failures affecting AD operations",
+  "author": "AD Identity Control Plane",
+  "lastUpdated": "2025-01-15T00:00:00Z",
+  "severity": "High",
+  "estimatedTime": "15-30 minutes",
+  "trigger": {
+    "condition": "healthCheck.name === 'DNSResolution' && healthCheck.status !== 'Healthy'",
+    "dataSource": "DCHealthReport"
+  },
+  "steps": [
+    {
+      "id": "step-1",
+      "type": "action",
+      "title": "Test DNS Resolution from Affected DC",
+      "description": "Verify whether the DC can resolve its own name and the domain name.",
+      "script": "Resolve-DnsName -Name {dc_hostname} -Type A",
+      "readOnly": true,
+      "next": "step-2"
+    },
+    {
+      "id": "step-2",
+      "type": "decision",
+      "title": "DNS Resolution Result",
+      "description": "Did the DNS resolution succeed?",
+      "options": [
+        { "label": "Yes - resolves correctly", "next": "step-3a" },
+        { "label": "No - resolution fails completely", "next": "step-3b" },
+        { "label": "Resolves but wrong IP", "next": "step-3c" }
+      ]
+    },
+    {
+      "id": "step-3a",
+      "type": "action",
+      "title": "Check SRV Records",
+      "description": "DNS A records work but SRV records may be missing. Check _ldap._tcp records.",
+      "script": "Resolve-DnsName -Name _ldap._tcp.dc._msdcs.{domain} -Type SRV",
+      "readOnly": true,
+      "next": "step-4-srv"
+    },
+    {
+      "id": "step-3b",
+      "type": "decision",
+      "title": "DNS Service Status",
+      "description": "Is the DNS Server service running on this DC?",
+      "options": [
+        { "label": "DNS service is running", "next": "step-4-zones" },
+        { "label": "DNS service is stopped", "next": "step-4-service" },
+        { "label": "DC is not a DNS server", "next": "step-4-config" }
+      ]
+    },
+    {
+      "id": "step-3c",
+      "type": "info",
+      "title": "Stale DNS Record",
+      "description": "DNS resolves to a wrong IP address. This indicates a stale record. Check: 1) Scavenging settings on the DNS zone, 2) Static vs dynamic registration, 3) Whether the old IP belongs to a decommissioned DC. Clean up the stale record and allow the DC to re-register.",
+      "next": "step-7-verify"
+    },
+    {
+      "id": "step-4-srv",
+      "type": "decision",
+      "title": "SRV Record Status",
+      "description": "Are the SRV records present and pointing to the correct DCs?",
+      "options": [
+        { "label": "SRV records missing", "next": "step-5-register" },
+        { "label": "SRV records present but wrong", "next": "step-5-register" },
+        { "label": "SRV records look correct", "next": "step-6-clients" }
+      ]
+    },
+    {
+      "id": "step-4-zones",
+      "type": "info",
+      "title": "Check DNS Zones",
+      "description": "DNS service is running but resolution fails. Check: 1) Are forward lookup zones loaded? 2) Is the _msdcs zone present? 3) Are zone transfers working? 4) Check DNS event log for errors. Run: dnscmd /enumzones",
+      "next": "step-5-register"
+    },
+    {
+      "id": "step-4-service",
+      "type": "info",
+      "title": "Restart DNS Service",
+      "description": "The DNS service is stopped. Before restarting, check the DNS event log for why it stopped. Common causes: corrupted zone file, insufficient permissions, port conflict. After checking, restart the service and verify zones load correctly.",
+      "next": "step-7-verify"
+    },
+    {
+      "id": "step-4-config",
+      "type": "info",
+      "title": "Check DNS Client Configuration",
+      "description": "This DC is not running DNS. Verify its DNS client settings point to working DNS servers: 1) Check preferred/alternate DNS server IPs, 2) Ensure those DNS servers are reachable, 3) The DC should preferably point to itself or another DC in the same site.",
+      "next": "step-7-verify"
+    },
+    {
+      "id": "step-5-register",
+      "type": "info",
+      "title": "Re-register DNS Records",
+      "description": "Force the DC to re-register its DNS records. Run 'nltest /dsregdns' on the affected DC (requires console access). Then restart the Netlogon service. Wait 5 minutes and verify records are created.",
+      "next": "step-7-verify"
+    },
+    {
+      "id": "step-6-clients",
+      "type": "info",
+      "title": "Client-Side DNS Issue",
+      "description": "DNS records are correct on the server side. The issue may be client-specific: 1) Flush DNS cache: ipconfig /flushdns, 2) Check client DNS settings, 3) Test from multiple clients, 4) Check for DNS proxy or firewall interference.",
+      "next": "step-7-verify"
+    },
+    {
+      "id": "step-7-verify",
+      "type": "action",
+      "title": "Verify DNS Resolution",
+      "description": "Confirm DNS resolution is working after remediation.",
+      "script": "Resolve-DnsName -Name {dc_hostname} -Type A",
+      "readOnly": true,
+      "next": "step-8-document"
+    },
+    {
+      "id": "step-8-document",
+      "type": "info",
+      "title": "Document Resolution",
+      "description": "Record: 1) Which DNS records were affected, 2) Root cause (service, zone, registration, stale record), 3) Remediation steps taken, 4) Verify AD-dependent services are working (LDAP, Kerberos, replication).",
+      "next": null
+    }
+  ]
+}

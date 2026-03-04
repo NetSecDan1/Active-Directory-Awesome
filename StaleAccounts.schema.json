@@ -1,0 +1,214 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ad-identity-control.local/schemas/StaleAccounts.schema.json",
+  "title": "Stale Accounts Report",
+  "description": "Report of stale, inactive, or potentially compromised AD accounts",
+  "type": "object",
+  "required": [
+    "reportId",
+    "generatedAt",
+    "generatedBy",
+    "schemaVersion",
+    "domain",
+    "thresholds",
+    "accounts"
+  ],
+  "properties": {
+    "reportId": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "generatedBy": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "type": "string",
+      "enum": ["1.0.0"]
+    },
+    "domain": {
+      "type": "string"
+    },
+    "thresholds": {
+      "$ref": "#/definitions/StaleThresholds"
+    },
+    "accounts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/StaleAccount"
+      }
+    },
+    "summary": {
+      "$ref": "#/definitions/StaleSummary"
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "StaleThresholds": {
+      "type": "object",
+      "required": ["inactiveDays", "passwordAgeDays"],
+      "properties": {
+        "inactiveDays": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of days since last logon to consider stale"
+        },
+        "passwordAgeDays": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of days since last password change to flag"
+        },
+        "neverLoggedOnIncluded": {
+          "type": "boolean",
+          "description": "Whether accounts that have never logged on are included"
+        }
+      },
+      "additionalProperties": false
+    },
+    "StaleAccount": {
+      "type": "object",
+      "required": [
+        "samAccountName",
+        "distinguishedName",
+        "accountType",
+        "enabled",
+        "staleReasons"
+      ],
+      "properties": {
+        "samAccountName": {
+          "type": "string"
+        },
+        "distinguishedName": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": ["string", "null"]
+        },
+        "accountType": {
+          "type": "string",
+          "enum": ["User", "Computer", "ServiceAccount", "ManagedServiceAccount"]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "lastLogonDate": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "Last logon timestamp (null if never logged on)"
+        },
+        "passwordLastSet": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "passwordNeverExpires": {
+          "type": "boolean"
+        },
+        "whenCreated": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "daysSinceLastLogon": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "daysSincePasswordChange": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "memberOf": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Group memberships (DNs)"
+        },
+        "isPrivileged": {
+          "type": "boolean",
+          "description": "Whether account is member of a privileged group"
+        },
+        "staleReasons": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "InactiveLogon",
+              "OldPassword",
+              "NeverLoggedOn",
+              "DisabledAccount",
+              "PasswordNeverExpires",
+              "PrivilegedStale"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "riskScore": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Calculated risk score (0-100)"
+        },
+        "recommendation": {
+          "type": "string",
+          "enum": ["Disable", "Delete", "Review", "ResetPassword", "NoAction"],
+          "description": "Recommended remediation action"
+        }
+      },
+      "additionalProperties": false
+    },
+    "StaleSummary": {
+      "type": "object",
+      "required": [
+        "totalAccountsScanned",
+        "staleAccountsFound"
+      ],
+      "properties": {
+        "totalAccountsScanned": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "staleAccountsFound": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "staleUsers": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "staleComputers": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "staleServiceAccounts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "privilegedStaleAccounts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "disableRecommended": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "deleteRecommended": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reviewRecommended": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "averageRiskScore": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
